@@ -1,6 +1,18 @@
 # Advanced Safety Filter
 
 
+
+## How to run Jupyter Notebooks
+
+Install Python 3.12 and Jupyterlab.
+
+Install the SOSOpt python library via pip:
+
+```
+pip install sosopt
+```
+
+
 ## Citing
 ```
 @article{schneeberger2024advanced,
