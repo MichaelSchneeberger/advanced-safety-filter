@@ -13,7 +13,7 @@ The project includes Jupyter notebooks that model and simulate the concept of an
 
 Install Python 3.12 and Jupyterlab.
 
-Install the SOSOpt python library via pip:
+Install the [SOSOpt](https://github.com/MichaelSchneeberger/sosopt) python library via pip:
 
 ```
 pip install sosopt
@@ -29,3 +29,14 @@ pip install sosopt
   year={2024}
 }
 ```
+
+## References
+
+Here are some references relevant to this project:
+
+* The paper [Control Barrier Functions: Theory and Applications](https://arxiv.org/pdf/1903.11199) introduces the concept of a safety filter.
+* The paper [Sums Of Sqaures, Moment Matrices And Optimization Over Polynomials](https://homepages.cwi.nl/~monique/files/moment-ima-update-new.pdf) provides a comprehensive introduction to SOS optimization.
+* The youtube playlist [A Course on LMIs in Systems and Control](https://www.youtube.com/playlist?list=PL5ebyVGQORm6n158o-I_liUZ7Q5Od43li) offers an accessible introduction to SOS optimization.
+* [SOSOpt](https://github.com/MichaelSchneeberger/sosopt) is a Python library designed for solving sums-of-squares (SOS) optimization problems.
+* [PolyMat](https://github.com/MichaelSchneeberger/sosmap) is a Python library designed for the representation and manipulation of multivariate polynomial matrices.
+* [State-Monad](https://github.com/MichaelSchneeberger/state-monad) is a Python library that encapsulates stateful computations into a monadic structure.
