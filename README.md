@@ -13,13 +13,13 @@ The project includes Jupyter notebooks that model and simulate the concept of an
 
 Install Python 3.12 and Jupyterlab.
 
-Then, install the [SOSOpt](https://github.com/MichaelSchneeberger/sosopt) Python library using pip:
+Then, clone this project to your local machine and install the requirements using pip:
 
 ```
-pip install sosopt
+pip install -r requirements.txt
 ```
 
-Next, clone this project to your local machine and open the Jupyter notebooks using Jupyterlab.
+Next, open the Jupyter notebooks using Jupyterlab.
 
 
 ## Citing
