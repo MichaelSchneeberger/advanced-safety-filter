@@ -22,16 +22,6 @@ pip install -r requirements.txt
 Next, open the Jupyter notebooks using Jupyterlab.
 
 
-## Citing
-```
-@article{schneeberger2024advanced,
-  title={Advanced safety filter based on SOS Control Barrier and Lyapunov Functions},
-  author={Schneeberger, Michael and Mastellone, Silvia and D{\"o}rfler, Florian},
-  journal={arXiv preprint arXiv:2401.06901},
-  year={2024}
-}
-```
-
 ## References
 
 Here are some references relevant to this project:
@@ -41,4 +31,14 @@ Here are some references relevant to this project:
 * The youtube playlist [A Course on LMIs in Systems and Control](https://www.youtube.com/playlist?list=PL5ebyVGQORm6n158o-I_liUZ7Q5Od43li) offers an accessible introduction to SOS optimization.
 * [SOSOpt](https://github.com/MichaelSchneeberger/sosopt) is a Python library designed for solving sums-of-squares (SOS) optimization problems.
 * [PolyMat](https://github.com/MichaelSchneeberger/sosmap) is a Python library designed for the representation and manipulation of multivariate polynomial matrices.
-* [State-Monad](https://github.com/MichaelSchneeberger/state-monad) is a Python library that encapsulates stateful computations into a monadic structure.
+
+
+## Citing
+```
+@article{schneeberger2024advanced,
+  title={Advanced safety filter based on SOS Control Barrier and Lyapunov Functions},
+  author={Schneeberger, Michael and Mastellone, Silvia and D{\"o}rfler, Florian},
+  journal={arXiv preprint arXiv:2401.06901},
+  year={2024}
+}
+```
