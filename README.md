@@ -2,7 +2,7 @@
 
 The project includes Jupyter notebooks templates that model and simulate the concept of an advanced safety filter.
 
-* [advanced_safety_filter_template](https://github.com/MichaelSchneeberger/advanced-safety-filter/blob/main/jupyter/advanced_safety_filter_template.ipynb)
+* [Advanced Safety Filter Template](https://github.com/MichaelSchneeberger/advanced-safety-filter/blob/main/jupyter/advanced_safety_filter_template.ipynb)
 
 
 
