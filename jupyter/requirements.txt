@@ -1,4 +1,4 @@
-sosopt==0.0.7
+sosopt==0.0.8
 ipywidgets
 quadprog
 matplotlib
