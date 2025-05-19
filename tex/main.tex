@@ -1,0 +1,1138 @@
+\documentclass[lettersize,journal]{IEEEtran}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{array}
+\usepackage[caption=false,font=normalsize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{textcomp}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{verbatim}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage[capitalize,nameinlink,compress]{cleveref}
+\hyphenation{op-tical net-works semi-conduc-tor IEEE-Xplore}
+
+\newcommand{\R}{\mathbb{R}}
+
+\makeatletter
+\newcommand{\pushright}[1]{\ifmeasuring@#1\else\omit$\displaystyle#1$\ignorespaces\fi}
+\makeatother
+
+\setlength{\marginparwidth}{2cm}
+\usepackage[prependcaption,colorinlistoftodos]{todonotes}
+\newcommand{\mscomment}[1]{\todo[inline,color=lightgray, linecolor=lightgray]{\small{\bf Comment:} #1}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{problem}{Problem}
+\newtheorem{remark}{Remark}
+\newtheorem{example}{Example}
+
+\crefname{appendix}{Appendix}{Appendices}
+\crefname{figure}{Figure}{Figures}
+\crefname{line}{line}{lines}
+\crefname{claim}{Claim}{Claims}
+\crefname{equation}{}{}
+\crefname{problem}{Problem}{Problems}
+\crefname{assumption}{Assumption}{Assumptions}
+
+\newenvironment{afterReviewAdded}{\par\color{black}}{\par}
+\newenvironment{afterReviewChanged}{\par\color{black}}{\par}
+\newenvironment{afterReviewRemoved}{\par\color{lightgray}}{\par}
+
+\newcommand{\afterReviewChangedBox}[1]{{\color{black}#1}}
+\newcommand{\afterReviewAddedBox}[1]{{\color{black}#1}}
+\newcommand{\afterReviewRemovedBox}[1]{\textcolor{lightgray}{#1}}
+
+
+
+\begin{document}
+
+\title{Advanced safety filter based on SOS Control Barrier and Lyapunov Functions}
+
+\author{Michael Schneeberger, Silvia Mastellone, Florian D{\"o}rfler 
+   % <-this % stops a space
+   \thanks{Michael Schneeberger and Silvia Mastellone are with the Institute of Electrical Engineering, FHNW, Windisch, Switzerland (e-mails: michael.schneeberger@fhnw.ch, silvia.mastellone@fhnw.ch), and Florian D{\"o}rfler is with the Department of Information Technology and Electrical Engineering, ETH Z{\"u}rich, Switzerland, (e-mail: dorfler@control.ee.ethz.ch)} % <-this % stops a space
+   \thanks{This work was supported by the Swiss National Science Foundation (SNSF) under NCCR Automation.}
+}
+
+\maketitle
+
+\begin{abstract}
+This paper presents a novel safety filter framework that ensures both safety and the preservation of the legacy control action within a nominal region. This modular design allows the safety filter to be integrated into the control hierarchy without compromising the performance of the existing legacy controller within the nominal region. This is accomplished by formulating multiple Control Barrier Functions (CBFs) and Control Lyapunov-like Functions (CLFs) conditions, alongside a forward invariance condition for the legacy controller, as sum-of-squares constraints utilizing Putinar's Positivstellensatz. Additionally, the state-dependent inequality constraints of the resulting Quadratic Program -- encoding the CBF and CLF conditions -- are designed to remain inactive within the nominal region, ensuring perfect tracking of the legacy control action. Our safety filter design is also the first to include quadratic input constraints, and does not need an explicit specification of the attractor, as it is implicitly defined by the legacy controller. To avoid the chattering effect and guarantee the uniqueness and Lipschitz continuity of solutions, the state-dependent inequality constraints of the Quadratic Program are selected to be sufficiently regular. Finally, we demonstrate the method in a detailed case study involving the control of a three-phase ac/dc power converter.
+\end{abstract}
+
+
+
+
+
+
+\section{Introduction}
+
+In various engineering applications, it is of much interest to endow a well-performant controller with safety guarantees by minimally changing its control action.
+This concept is commonly referred to as a \textit{safety filter}, and a comprehensive overview of the subject can be found in \cite{wabersich2023data}.
+An illustrative example is a finely-tuned control design based on linearization, which must be extended to adhere to hard state constraints in the nonlinear closed-loop system.
+We refer to such a well-performant controller as the \emph{legacy controller}.
+A popular type of safety filters relies on solving a Quadratic Program (QP) at every state using a Control Barrier Function (CBF).
+By continuously solving the QP, the control action of the legacy controller is smoothly adjusted as the system approaches the boundary of the \emph{safe set} $\mathcal X_s$.
+The main challenges in deploying such a safety filter lies in finding a viable CBF candidate and adhering to input constraints.
+
+\afterReviewChangedBox{Even though safety filters based on a QP are well-established, they are frequently not adopted in current industrial setups due to their risk of altering the legacy control behavior during nominal operations.
+In practice, the legacy control parameters are often meticulously tuned and thoroughly evaluated, typically involving extensive hardware-in-the-loop simulations, which require significant time and resources.
+As a result, the safety filter is expected to intervene only when the system approaches state constraints, meaning when it is leaving the nominal operating regime.}
+
+\begin{figure}[!t]
+   \centering
+   \resizebox{59mm}{!}{\includegraphics{images/1_safe_and_nominal_region}}
+   \caption{
+      The safe set $\mathcal X_s$, defined as the zero sublevel set of the CBF $B(x)$, specifies the set of states for which safety can be guaranteed.
+      The safe set must be contained within the allowable set $\mathcal X_a$, which encodes the system's state constraints.
+      Finally, the nominal region $\mathcal X_n$, defined as the zero sublevel set of the CLF $V(x)$, 
+      must be contained within the safe set $\mathcal X_s$.
+   }
+   \label{fig:safe_and_noinal_region}
+\end{figure}
+
+\afterReviewChangedBox{This paper presents a safety filter concept that guarantees the preservation of the legacy control action within a \emph{nominal region} $\mathcal X_n$, which contains the desired closed-loop equilibrium point (or another attractor), as depicted in \cref{fig:safe_and_noinal_region}.
+Unlike in a reach-avoid problem \cite{kumar2023fast}, the nominal region $\mathcal X_n$ does not represent a predetermined set of target states.
+Instead, it is selected during the design process (often at an earlier stage) to encompass the nominal operating regime of the legacy controller while maintaining a sufficiently large transitional region for a smooth safety filter operation.
+The specifications are inherently more stringent than those of a standard safety filter, but may therefore be deployed in an industrial setup without interference in the original line-up.}
+
+Our safety filter is realized based on solving a Quadratic Constraint Quadratic Program (QCQP) at every state using multiple CBFs and Control Lyapunov-like Functions (CLFs).
+A QCQP instead of a simple QP is employed to encode quadratic input constraints, which are common, e.g., in power electronic applications.
+\afterReviewChangedBox{While CBF conditions (encoded as linear constraints of the QCQP) are used to ensure safety w.r.t. $\mathcal X_s$, we leverage the CLF condition (also encoded as linear constraints of the QCQP) to specify a dissipation rate ensuring a finite-time convergence from the boundary of the safe set to the nominal region $\mathcal X_n$.
+The finite-time convergence property is not intended to enhance control performance but to ensure a rapid return to the nominal operating regime following an unforeseen event.
+We ensure that the nominal set contains the desired attractor by selecting it forward invariant with respect to the legacy controller.
+For identifying compatible CBF and CLF candidates that adhere to the linear and quadratic input constraints, as well as a solution for the QCQP at every state, we propose a Sum-of-Squares (SOS) optimization approach.
+Preserving the legacy control action is achieved by ensuring that the inequality constraints of the QCQP remain inactive within $\mathcal X_n$.
+This necessitates taking into account the legacy controller when searching for appropriate CBF and CLF candidates.}
+To solve the resulting SOS program, we deploy an alternating algorithm that simultaneously searches for a feasible controller in the class of rational functions of the state.
+
+The concept of our safety filter resembles the integration of a CLF with a CBF to attain both safety and stabilization.
+Such a unification, although just with a single function, has been initially proposed in \cite{RomdlonyJayawardhana:14}.
+The integration of both CLF and CBF into an optimization-based controller has since become a well-established concept, see the survey in \cite{AmesCoogan:19}.
+\afterReviewChangedBox{Feasibility of such an optimization-based controller can be accomplished by introducing a slack variable that deactivates CLFs and CBFs based on their respective priorities, as shown in \cite{ames2014control}.
+Alternatively, it is possible to compute compatible CLFs and CBFs using SOS tools, ensuring that for every state, there exists an input $u$ satisfying all CBF and CLF conditions.
+In order to encode compatibility, there is one approach that introduces an SOS constraint for each CLF/CBF pair in the absence of inputs constraints \cite{Clark:21}.}
+The second approach establishes compatibility by introducing a polynomial or rational state-feedback controller, as outlined in \cite{WangHan:18,schneeberger2023sos}.
+Such a controller can also be used to enforce linear input constraints, as demonstrated in \cite{WangMargellos:22}. 
+Another noteworthy approach for imposing input constraints using a contrapositive statement, albeit without ensuring compatibility between CBFs and CLFs, is introduced in \cite{dai2023convex}.
+These approaches introduce auxiliary polynomials that render the resulting SOS problem bilinear in its decision variables.
+In \cite{TanPackard:04}, an alternating algorithm is proposed to solve this bilinear SOS problem.
+One challenge in seeking CLF and CBF candidates through an alternating algorithm is to identify an initial feasible point.
+In their work in \cite{zhao2023convex}, the authors constrained their search for an initial CBF to scalar functions of a specific form.
+This restriction allows to reformulate the problem with linearity in its decision variables.
+
+\afterReviewChangedBox{After our previous work \cite{schneeberger2023sos} on synthesizing a rational controller to find compatible CLF and multiple CBFs using SOS optimization, and through collaboration with industrial partners, we identified a recurring issue: any modifications to the existing legacy control architecture should not compromise the nominal control performance.
+A prime example for this is the integration of a safety filter.
+In this paper, we propose a novel way of implementing a safety filter without disturbing the legacy controller within the nominal region.
+The key advancements are summarized as follows:
+\begin{itemize}
+   \item First, we propose a novel safety filter implementation that, by design, ensures finite-time convergence to the nominal region $\mathcal X_n$ and perfect tracking of the legacy control action within that region.
+   \item Second, multiple CBFs are used to the increase flexibility of the resulting safe set. 
+   Instead of imposing each CBF condition separately, we relax these conditions when the corresponding CBF is not active, similar to the idea in \cite{IsalyGhanbarpour:22}.
+   Moreover, the CLF condition can also be relaxed by leveraging the forward invariance property of the CBFs, similar to \cite{valmorbida2017region} for autonomous systems.
+   \item Third, the desired attractor (e.g., an equilibrium point or limit cycle), which is stabilized by the legacy controller in the nominal region, does not need to be specified explicitly, as it is implicitly specified through the legacy controller as a forward invariance condition.
+   \item Fourth, we introduce a novel approach for encoding linear and quadratic input constraints on the rational controller.
+   This ensures feasibility of the resulting QCQP-based controller, even in case of quadratic input constraints -- an issue that, to the authors' knowledge, is unsolved.
+\end{itemize}}
+To avoid chattering and guarantee the uniqueness and Lipschitz continuity of solutions, the state-dependent inequality constraints of the QCQP are selected to be sufficiently regular.
+Finally, we tested our framework on a detailed three-phase ac/dc converter system connected to an infinite bus, where we successfully synthesized a safety filter that ensures satisfaction of the state constraints given by the dc-link voltage and line current, while adhering to quadratic input constraints.
+We further tracked an a priori unspecified quadrature current reference of the ac/dc converter by integrating the reference as a state into a slightly modified system model.
+
+The remainder of the paper is structured as follows: 
+In \cref{sec:preliminaries}, the preliminaries and notation are discussed.
+\cref{sec:specification_and_problem_statement} introduces the concept of the advanced safety filter, its properties, and the resulting problem statement.
+Numerical simulations, presented in \cref{sec:simulations}, are provided to demonstrate the efficacy of our safety filter.
+Finally, \cref{sec:conclusion} concludes the paper.
+
+
+
+
+
+
+\section{Preliminaries \& Notation} \label{sec:preliminaries}
+
+\subsection{Notation}
+
+The shorthand $\mathcal I_t := \lbrace 1, 2, ..., t \rbrace$ designates a range of natural numbers from 1 to $t$.
+$R[x]$ refers to the set of scalar polynomials in variables $x \in \R^n$, and $\Sigma[x]$ refers to the set of scalar SOS polynomials in variables $x \in \R^n$. 
+If $p(x) \in \Sigma[x]$, it can be expanded to
+\begin{align} \label{eq:quadratic_matrix_form}
+   p(x) = Z(x)^T Q Z(x),
+\end{align}
+where $Z(x)$ is a vector of monomials in $x$, and $Q$ is a square positive semidefinite matrix.
+
+Throughout the paper, we consider a polynomial control system, affine in the control action $u \in \R^m$, and described as
+\begin{align} \label{eq:control_system}
+   \dot x = F_c(x, u) = f(x) + G(x) u,
+\end{align}
+where $x \in \R^n$ is the state, $f(x) \in \left( R[x] \right)^n$ is a polynomial vector field, and $G(x) \in \left( R[x] \right)^{n \times m}$ is a polynomial matrix.
+System~\cref{eq:control_system} with a polynomial state feedback control policy $u_{cl}(x) \in \left( R[x] \right)^m$ results in a closed-loop system of the form
+\begin{align} \label{eq:closed_loop_system}
+   \dot x = F_{cl}(x) = f(x) + G(x) u_{cl}(x).
+\end{align}
+
+The interior of a set $\mathcal X \subseteq \R^n$ is denoted by $\text{int}(\mathcal X)$.
+A subset $\mathcal X \subseteq \R^n$ is called \emph{forward invariant} (cf. \cite[Theorem 4.4]{Khalil:02}) with respect to system \cref{eq:closed_loop_system} if for every $x(0) \in \mathcal X$, $x(t) \in \mathcal X$ for all $t \geq 0$.
+A system \cref{eq:closed_loop_system} is called \emph{safe} (cf. \cite{WielandAllgower:07}) w.r.t. an \emph{allowable set} of states $\mathcal X_a \subseteq \R^n$ and the \emph{safe set} $\mathcal X_s \subseteq \R^n$, if $\mathcal X_s$ is forward invariant and 
+$\mathcal X_s \subseteq \mathcal X_a$.
+We say that a controller $u_{cl}(x)$ guarantees safety if the corresponding closed-loop system is safe.
+
+\begin{assumption}[standing assumption] \label{ass:compact_safe_set} 
+   In the following, the allowable set $\mathcal X_a$ is assumed compact and regular.
+\end{assumption}
+
+
+
+\subsection{Putinar's Positivstellensatz} \label{sec:putinars_psatz}
+
+Before stating Putinar's P-satz, we need to introduce two preliminary definitions.
+\begin{definition}
+   A \emph{quadratic module} generated by polynomials $f_2, ..., f_n \in R[x]$ is defined by
+   \begin{align} \label{eq:quadratic_module}
+      \textbf M(f_2, ..., f_n) := \left \{ \gamma_0 + \sum_{i=2}^n \gamma_i f_i \mid \gamma_0, ..., \gamma_n \in \Sigma[x] \right \}.
+   \end{align}
+\end{definition}
+\begin{definition}
+   A quadratic module $\textbf M(f_2, ..., f_n)$ is said to be \emph{Archimedean} when there exists a polynomial $f \in \textbf M(f_2, ..., f_n)$ such that $\{ x \in \R^n \mid f \geq 0 \}$ is a compact set.
+\end{definition}
+The following theorem states Putinar's P-satz (cf. \cite[Theorem 3.20]{laurent2009sums}).
+\begin{theorem} \label{eq:thm:putinars_psatz}
+   Given polynomials $f_1, ..., f_n \in R[x]$ such that the quadratic module $\textbf M(f_2, ..., f_n)$ is Archimedean, and 
+   \begin{align} \label{thm:putinars_psatz_emptyset}
+      \begin{split}
+          \Bigl\{ x \mid &f_1(x) \leq 0, f_2(x) \geq 0, ..., f_n(x) \geq 0 \Bigr\} = \emptyset,
+      \end{split}
+   \end{align}
+   then 
+   \begin{align} \label{thm:putinars_psatz_equality}
+      f_1 \in \textbf M(f_2, ..., f_n).
+   \end{align}
+\end{theorem}
+In words, if the set in \cref{thm:putinars_psatz_emptyset} is empty, Putinar's P-satz ensures that the polynomials $\gamma_0, \gamma_2, ..., \gamma_n$ defined in \cref{eq:quadratic_module} exist, albeit without specifying their degree.
+To find these polynomials computationally requires to iteratively increase the degree of the polynomials until a solution can be found for~\cref{thm:putinars_psatz_equality}. 
+An increase in the degree of the polynomials will, however, deteriorate computation time.
+For many practical examples of interest, however, low-degree polynomials suffice.
+
+Condition \cref{thm:putinars_psatz_equality} can also be expressed more explicitly through the condition that there exists $\gamma_1, \gamma_2, ..., \gamma_n \in \Sigma[x]$ such that
+\begin{align} \label{eq:putinars_psatz_sos_condition}
+   \gamma_1 f_1 - \gamma_2 f_2 - ... - \gamma_n f_n \in \Sigma[x].
+\end{align}
+Assuming the empty-set condition in \cref{thm:putinars_psatz_emptyset} holds, a solution to \cref{eq:putinars_psatz_sos_condition} involving $\gamma_1(x) = 1$ is guaranteed by Putinar's P-satz to exist when the degrees of the polynomials are possibly unbounded.
+In this case, the introduction of the SOS polynomial $\gamma_1(x)$ needlessly increases the set of feasible polynomials $f_1(x)$.
+However, when the degrees of the polynomials are truncated, this assertion may no longer hold true, justifying the utilization of $\gamma_1(x)$.
+For the rest of the paper, we refer to both inclusions, \cref{thm:putinars_psatz_equality} and \cref{eq:putinars_psatz_sos_condition}, as an \emph{SOS constraint}.
+
+
+
+
+
+
+\section{Specifications and Problem statement} \label{sec:specification_and_problem_statement}
+
+\subsection{Specifications}
+
+The concept of a \emph{safety filter} (see \cref{fig:safety_filter_diagram}) is based on the idea of enhancing the behavior of a previously designed \emph{legacy controller} $u_n(x)$ with safety guarantees.
+The safety filter adjusts the control action of the legacy controller, ideally in a minimal way, to render the system safe with respect to an allowable set $\mathcal X_a$, encoding the state constraints, and a safe set $\mathcal X_s$.
+The safe set denotes a set of states that is forward invariant for some state feedback controller.
+Therefore, we require that the safe set is strictly contained within the allowable set, i.e.,
+\begin{align} \label{eq:xs_subsetneq_xa}
+   \mathcal X_s \subseteq \mathcal X_a.
+\end{align}
+The safe set is preferably chosen large in volume to closely approximate the allowable set.
+
+\begin{figure}[!t]
+   \centering
+   \resizebox{85mm}{!}{\includegraphics{images/2_safety_filter_diagram}}
+   \caption{
+      The safety filter $u_s(u_n, x)$ adjusts the legacy control action $u_n(x)$ -- if necessary -- to guarantee safe operation.}
+   \label{fig:safety_filter_diagram}
+\end{figure}
+
+The standard characterization of a safety filter does not specify the extent to which it is allowed to alter the legacy control action.
+This can be problematic, as the safety filter might inadvertently undermine the desired behavior of the legacy controller.
+In contrast, our \emph{advanced safety filter} $u_s(x)$
+specifies a distinct region $\mathcal X_n$, where the safety filter remains inactive,
+that is, for all $x \in \mathcal X_n$: 
+\begin{align} \label{eq:sf_inactive_condition}
+   u_s(x) = u_n(x).
+\end{align}
+This \emph{nominal region} $\mathcal X_n$ is required to be forward invariant under the legacy control $u_n(x)$, and to be strictly contained within the safe set, i.e.,
+\begin{align} \label{eq:xn_subsetneq_xs}
+   \mathcal X_n \subsetneq \mathcal X_s.
+\end{align}
+\afterReviewChangedBox{For a legacy controller that stabilizes the closed-loop system to an attractor within $\mathcal X_a$, a forward invariant set does always exist.}
+
+Moreover, the advanced safety filter should preserve such a stability guarantee across the entire safe set.
+This is already accomplished within the nominal region $\mathcal X_n$ due to its forward invariance property.
+Hence, we only need to additionally ensure a finite-time convergence to $\mathcal X_n$ for all trajectories originating within the \emph{transitional region}, defined as:
+\begin{align} \label{eq:transitional_region}
+   \mathcal X_t := \mathcal X_s \setminus \text{int}(\mathcal X_n),
+\end{align}
+where $\text{int}(\mathcal X_n)$ denotes the interior of a set $\mathcal X_n$.
+\begin{remark}
+   \textit{\afterReviewChangedBox{
+      The volume of $\mathcal X_t$ must be balanced with the volume of $\mathcal X_n$.
+      A larger $\mathcal X_t$ ensures a smooth behavior of the safety filter when returning the system to $\mathcal X_n$,
+      while a larger $\mathcal X_n$ provides a wider nominal region where the safety filter does not modify the legacy control action.
+   }}
+\end{remark}
+
+
+
+\subsection{CBF and CLF conditions formalizing the specifications} \label{sec:specifications}
+
+\begin{figure*}[!t]
+   \centering
+   \setkeys{Gin}{width=0.24\linewidth}
+   \subfloat[\label{fig:safety_filter_specifications1}]{\resizebox{59mm}{!}{\includegraphics{images/3a_forward_invariant_safe_set}}}
+   \hfil
+   \subfloat[\label{fig:safety_filter_specifications2}]{\resizebox{59mm}{!}{\includegraphics{images/3b_finite_time_convergence}}}
+   \hfil
+   \subfloat[\label{fig:safety_filter_specifications3}]{\resizebox{59mm}{!}{\includegraphics{images/3c_forward_invariant_nominal_region}}}
+   \caption{
+      The advanced safety filter is characterized by the following specifications: (a) the safe set $\mathcal X_s$ is forward invariant as encoded in \cref{eq:cbf_condition}, (b) it ensures finite-time convergence towards the nominal region $\mathcal X_n$ as encoded in \cref{eq:clf_condition}, and (c) the nominal region is forward invariant under the legacy controller $u_n(x)$ as encoded in \cref{eq:forward_invariant_nominal_region} assuming $d(x) = 0$.
+   }
+   \label{fig:safety_filter_specifications}
+\end{figure*}
+
+\afterReviewChangedBox{We employ control Lyapunov and barrier functions to encode the specification from the previous subsection by introducing energy-like scalar functions.
+In the process, we define the safe set as the intersection of zero-sublevel sets of multiple continuously differentiable functions to closely fit the algebraic structure of the allowable set
+\begin{align} \label{eq:allowable_set}
+   \mathcal X_a := \Bigl\{ x \mid w_i(x) \leq 0 \text{ } \forall i \in \mathcal I_t \Bigr\} = \bigcap_{i \in \mathcal I_t} \mathcal X_{a,i},
+\end{align}
+where $w_i \in R[x]$, $i \in \mathcal I_t$, are scalar polynomials, and their zero-sublevel sets $\mathcal X_{a,i} := \{ x \mid w_i(x) \leq 0 \}$ are assumed to be compact.
+This compactness condition is important for applying Putinar's P-satz in the following section of the paper, and it is not restrictive for the applications we have in mind.}
+
+\afterReviewChangedBox{The forward invariance property of the safe set can be asserted by a scalar function $B(x)$ defined as the point-wise maximum of a set of continuously differentiable functions $B_i: \R^n \to \R$ indexed by $\mathcal I_t$:
+\begin{align} \label{eq:control_barrier_function}
+   B(x) := \underset{i \in \mathcal I_t}{\text{max}} \, B_i(x),
+\end{align}
+such that the safe set is given by the intersection of the individual zero-sublevel sets:
+\begin{align*}
+   \mathcal X_s := \left \{ x \mid B(x) \leq 0 \right \} = \bigcap_{i \in \mathcal I_t} \mathcal X_{s,i},
+\end{align*}
+where $\mathcal X_{s,i} := \left \{ x \mid B_i(x) \leq 0 \right \}$.
+Taking the intersection of multiple functions $B_i(x)$ allows for greater flexibility to increase the volume of the safe set compared to using the zero-sublevel set of a single CBF function.
+This is because the zero-sublevel sets of each $B_i(x)$ can extend beyond the allowable set, provided their intersection remains within the allowable set. 
+In contrast, the zero-sublevel set of a single CBF must be fully contained within the allowable set.
+Hence, we encode the containment condition in \cref{eq:xs_subsetneq_xa} as:
+\begin{align} \label{eq:xs_subsetneq_xa_i}
+   \mathcal X_{s,i} \subseteq \mathcal X_{a,i},
+\end{align}
+for every $i \in \mathcal I_t$.
+This can be seen from $\bigcap_{i \in \mathcal I_t} \mathcal X_{s,i} \subseteq \bigcap_{i \in \mathcal I_t} \mathcal X_{a,i}$ implying $\mathcal X_s \subseteq \mathcal X_a$.
+Here, we assume that the CBF $B(x)$ is defined using the same number of polynomials $B_i(x)$ as polynomials $w_i(x)$ that define the allowable set.
+To reduce the number of decision variables in $B(x)$, we can equate certain polynomials $B_i(x)$ in the resulting SOS problem.
+This reduction results in a safe set comprising fewer distinct subsets $\mathcal X_{s,i}$ compared to the subsets $\mathcal X_{a,i}$ that define the allowable set.}
+
+\begin{assumption} \label{ass:regular_safe_set}
+   We assume the safe set $\mathcal X_s$ to be regular in the sense that $\forall x \in \mathcal X_s, \exists z \in \R^n, \forall i \in \mathcal I_t$ \cite[Definition 4.9]{Blanchini:99}:
+   \begin{align*}
+      B_i(x) + \nabla B_i(x)^T z < 0
+   \end{align*}
+\end{assumption}
+The regularity assumption in \cref{ass:regular_safe_set} is a mild one, and it generically holds true, 
+if $B_i(x)$ is chosen as a polynomial.
+It implies that the interior of the safe set is given by $\text{int} (\mathcal X_s) = \left \{ x \mid B_i(x) < 0 \quad i \in \mathcal I_t \right \}$.
+Examples of polynomials that violate the regularity assumption can be found in \cite[Chapter 4.2]{Blanchini:99}.
+
+To ensure forward invariance of $\mathcal X_s$, as shown in \cref{fig:safety_filter_specifications}(a), $B(x)$ needs to satisfy Nagumo's theorem, that is, $\forall x \in \partial \mathcal X_s, \exists u \in \R^m$ (cf. \cite[Nagumo's Theorem 4.7]{Blanchini:99}):
+\begin{align} \label{eq:cbf_condition}
+   f(x) + G(x) u \in \mathcal T_{\mathcal X_s}(x),
+\end{align}
+where, under \cref{ass:regular_safe_set}, the tangent cone is defined by
+\begin{align} \label{eq:cbf_condition_active_constraints}
+   \mathcal T_{\mathcal X_s}(x) := \{ z \mid \nabla B_i(x)^T z \leq 0 \quad i \in \text{Act}(x) \},
+\end{align}
+and $\text{Act}(x) := \left\{ i \in \mathcal I_t \mid B_i(x) = 0 \right\}$ denotes the set of active constraints.
+\afterReviewChangedBox{The function $B(x)$ in \cref{eq:control_barrier_function} satisfying \cref{eq:cbf_condition,eq:cbf_condition_active_constraints} will henceforth be referred to as a \emph{Control Barrier Function} (CBF).}
+
+\afterReviewChangedBox{Compared to the standard safety filter, our approach also require finite-time convergence towards $\mathcal X_n$, as outlined in the specifications.}
+This is asserted by a Control Lyapunov Function (CLF) defined by a continuously differentiable function $V: \R^n \to \R$.
+This function needs to satisfy a Control Lyapunov-like condition in the transitional region $\mathcal X_t$, as shown in \cref{fig:safety_filter_specifications}(b).
+Namely, $\forall x \in \mathcal X_t, \exists u \in \R^m$:
+\begin{align} \label{eq:clf_condition}
+   \nabla V(x)^T \left ( f(x) + G(x) u \right ) + d(x) \leq 0
+\end{align}
+with \emph{dissipation rate}
+\begin{align} \label{eq:dissipation_rate}
+   d(x) := \lambda(x) \left ( V(x) + V_0 \right ) > 0,
+\end{align}
+where $\lambda: \R^n \to \R_{> 0}$ is a Lipschitz continuous function, and $V_0 \leq \text{min}_x \left ( V(x) \right )$ is a constant value, ensuring $d(x)$ is strictly positive (and thus $V(x)$ strictly decaying) in the transitional region $\mathcal X_t$.
+\afterReviewChangedBox{By utilizing a strictly positive function $d(x)$, the CLF condition can be expressed as a non-strict inequality condition similar to the CBF condition -- a crucial distinction for the subsequent arguments presented in the next section.}
+We define the nominal region as the zero sublevel set of $V(x)$:
+\begin{align*}
+   \mathcal X_n := \left \{ x \mid V(x) \leq 0 \right \}.
+\end{align*}
+Consequently, the transitional region is given by:
+\begin{align*}
+   \mathcal X_t := \left \{ x \mid B(x) \leq 0 \leq V(x) \right \}.
+\end{align*}
+The next lemma establishes the finite-time convergence property associated with the CLF $V(x)$. 
+Its proof can be found in the appendix.
+\begin{lemma} \label{thm:finite_time_convergence}
+   Given a Lipschitz-continuous controller $u_s: \R^n \to \R^m$ that satisfies condition \cref{eq:clf_condition} with $u := u_s(x)$ and renders the safe set $\mathcal X_s$ forward invariant,
+   then for all trajectories of system \cref{eq:closed_loop_system} starting in the safe set $\mathcal X_s$ there exists some finite $T \geq 0$ such that $x(t) \in \mathcal X_n$ for all $t \geq T$.
+\end{lemma}
+
+Additionally, to make the nominal region forward invariant w.r.t. the legacy controller $u_n(x)$, as depicted in \cref{fig:safety_filter_specifications}(c), we propose the condition that $\forall x \in \partial \mathcal X_n$:
+\begin{align} \label{eq:forward_invariant_nominal_region}
+   \nabla V(x)^T \left ( f(x) + G(x) u_n(x) \right ) + d(x) \leq 0.
+\end{align}
+\afterReviewChangedBox{Notice that forward invariance also follows with $d(x) = 0$.
+By adopting a slightly stricter forward invariance condition in \cref{eq:forward_invariant_nominal_region} involving the strictly positive dissipation rate $d(x)$, we ensure the existence of the safety filter implementation as specified in \cref{sec:online_controller}.}
+\begin{remark}
+   \textit{\afterReviewChangedBox{
+      As the volume of the transitional region $\mathcal X_t$ approaches zero, the proposed safety filter transitions into a safety filter based on a single CBF $V(x) = B_1(x) = \hdots = B_t(x)$, where the CBF and CLF condition \cref{eq:cbf_condition,eq:clf_condition} are automatically satisfied by the forward invariance condition \cref{eq:forward_invariant_nominal_region} of the legacy controller.
+      Therefore, feasible CBF and CLF candidates can be found (in the limit) if a forward invariant set for the system, governed by the legacy controller, exists and is fully contained within the allowable set.
+      % the problem simplifies to finding a forward invariant set for the system, using the legacy controller, that is contained in the allowable set.
+      % In this case, a solution to the proposed safety filter exists if there exists a forward invariant set using the legacy controller contained within the allowable set.
+   }}
+\end{remark}
+
+
+
+\subsection{Problem statement} \label{sec:problem_statement}
+
+The challenge of deriving the advanced safety filter can be divided into two subproblems.
+\afterReviewChangedBox{The first subproblem resolves around finding $B(x)$ and $V(x)$ that fulfill the CBF and CLF condition outlined in the preceding section.
+This involves constructing a rational controller $u_\text{SOS}(x)$ to prove the compatibility of the CLF and CBF conditions in \cref{eq:cbf_condition,eq:clf_condition}.
+Furthermore, we necessitate the assurance of the forward invariance condition of the legacy controller as defined in \cref{eq:forward_invariant_nominal_region}.}
+\begin{problem} \label{prob:finding_cbfs_and_clf}
+   Given a dynamical system \cref{eq:closed_loop_system}, an allowable set of states $\mathcal X_a$ and a legacy controller $u_n(x) \in \mathcal U$, find scalar functions $B(x): \R^n \to \R$ and $V(x): \R^n \to \R$ such that: \begin{itemize}
+      \item (set containment) the containment conditions in \cref{eq:xs_subsetneq_xa,eq:xn_subsetneq_xs} are satisfied,
+      \item (finite-time convergence) the CLF condition in \cref{eq:clf_condition} is satisfied,
+      \item (forward-invariance of $\mathcal X_s$) CBF and CLF conditions in \cref{eq:cbf_condition,eq:clf_condition} are satisfied on $\partial \mathcal X_s$ for the same $u$,
+      \item (forward-invariance of $\mathcal X_n$) legacy control condition in \cref{eq:forward_invariant_nominal_region} is satisfied,
+      \item (objective) CBF $B(x)$ maximizes the volume of the safe set, denoted by $\text{vol}(\mathcal X_s)$.
+   \end{itemize}
+\end{problem}
+
+\afterReviewChangedBox{For the second subproblem, a safety filter $u_s(x)$  is constructed from $B(x)$ and $V(x)$, which is guaranteed to be feasible and Lipschitz-continuous, entailing a smooth transitioning from the safety filter operation to the legacy control operation.}
+\begin{problem} \label{prob:finding_safety_filter}
+   \afterReviewChangedBox{Given a dynamical system \cref{eq:closed_loop_system}, a Lipschitz-continuous legacy controller $u_n(x)$, a CBF $B(x)$ and CLF $V(x)$, as specified in \cref{prob:finding_cbfs_and_clf},
+   find state-feedback control law $u_s(x)$ that
+   is feasible for all $x \in \R^n$, satisfies the CBF and CLF conditions \cref{eq:cbf_condition,eq:clf_condition} with $u := u_s(x)$, coincides with $u_n(x)$ on $\mathcal X_n$ (cf. \cref{eq:sf_inactive_condition}), and is Lipschitz-continuous.}
+\end{problem}
+In \cref{sec:sos_optimization}, we delve into a solution for \cref{prob:finding_cbfs_and_clf}, while a solution for \cref{prob:finding_safety_filter} is derived in \cref{sec:online_controller}.
+
+\begin{figure}[!t]
+   \centering
+   \resizebox{85mm}{!}{\includegraphics{images/4_problem_statements}}
+   \caption{
+      \cref{prob:finding_cbfs_and_clf} involves searching for compatible CBF $B(x)$ and CLF $V(x)$ using SOS tools.
+      Based on $B(x)$ and $V(x)$, the linear constraints of the QCQP given by $C(x)$, $b(x)$ and $r(x)$ are determined.}
+\end{figure}
+
+
+
+
+
+
+\section{Constructing CBF and CLF using SOS optimization} \label{sec:sos_optimization}
+
+\subsection{SOS formulation of CBF and CLF conditions} \label{sec:cbf_and_clf_sos_constraints}
+
+The objective of this subsection is to derive sufficient SOS conditions that encode the CBF condition on $\mathcal X_s$ and $\mathcal X_n$, as specified in \cref{eq:cbf_condition,eq:forward_invariant_nominal_region}, and the CLF condition, as specified in \cref{eq:clf_condition}.
+We further demonstrate that these SOS conditions are not overly conservative and pose no practical concerns.
+
+The CBF condition in \cref{eq:cbf_condition} involves the set of active constraints $\text{Act}(x)$, a construction that cannot be directly expressed as an SOS constraint.
+To address this issue, we first consider the polynomials $B_i(x)$, $i \in \mathcal I_t$, defining the CBF $B(x)$ in \cref{eq:control_barrier_function}, as independent CBFs in their own right.
+By ensuring compatibility among these CBFs $B_i(x)$ as proposed in \cite{schneeberger2023sos}, we demonstrate sufficiency of the resulting SOS constraints with respect to CBF condition in \cref{eq:cbf_condition} (involving the desired CBF $B(x)$).
+The CBF condition for each $B_i(x)$, $i \in \mathcal I_t$, is expressed as $\forall x \in \{ x \in \mathcal X_s \mid B_i(x) = 0\}, \exists u \in \R^m$:
+\begin{align} \label{eq:cbf_condition_inequality}
+   \nabla B_i(x)^T \left ( f(x) + G(x) u \right ) \leq 0.
+\end{align}
+
+Another challenge in converting conditions \cref{eq:cbf_condition_inequality,eq:clf_condition} to SOS constraints is the presence of the existential quantifier $\exists u \in \R^m$.
+However, following the approach in \cite{TanPackard:04}, we can reformulate these conditions without the need for an existential quantifier.
+The CBF condition \cref{eq:cbf_condition_inequality} can be expressed as $\forall x \in \{ x \in \mathcal X_s \mid B_i(x) = 0, \nabla B_i(x)^T G(x) = 0 \}$:
+\begin{align} \label{eq:cbf_condition_no_exist_quant}
+   \nabla B_i(x)^T f(x) \leq 0.
+\end{align}
+Similarly, the CLF condition in \cref{eq:clf_condition} can be formulated as $\forall x \in \{ x \in \mathcal X_t \mid \nabla V(x)^T G(x) = 0 \}$:
+\begin{align} \label{eq:clf_condition_no_exist_quant}
+   \nabla V(x)^T f(x) + d(x) \leq 0.
+\end{align}
+
+In order to render the problem tractable, we restrict our attention to polynomial candidates $B_i \in R[x]$, $i \in \mathcal I_t$, and polynomial candidate $V \in R[x]$.
+We then apply Putinar's P-satz, as stated in \cref{eq:thm:putinars_psatz}, on a slightly more stringent conditions compared to \cref{eq:forward_invariant_nominal_region,eq:cbf_condition_no_exist_quant,eq:clf_condition_no_exist_quant}, where the inequality is replaced by a strict inequality.
+These more stringent conditions are summarized as the following empty-set conditions, $i \in \mathcal I_t$:
+\begin{subequations} \label{eq:empty-set_conditions}
+   \begin{align}
+      \begin{split}
+         \{ x \mid &-\nabla B_i(x)^T f(x) \leq 0, \nabla B_i(x)^T G(x) = 0, \\
+         &B_i(x) = 0, -B_{\mathcal I_t}(x) \geq 0 \} = \emptyset
+      \end{split} \\
+      \begin{split} \label{eq:empty-set_conditions_clf}
+         \{ x \mid &- \nabla V(x)^T f(x) - d(x) \leq 0, \nabla V(x)^T G(x) = 0, \\
+         & V(x) \geq 0, -B_{\mathcal I_t}(x) \geq 0 \} = \emptyset
+      \end{split} \\
+      \begin{split}
+         \{ x \mid &\nabla V(x)^T \left ( f(x) + G(x) u_n(x) \right ) + d(x) \leq 0, \\
+         &V(x) = 0 \} = \emptyset,
+      \end{split}
+   \end{align}
+\end{subequations}
+where $B_{\mathcal I_t}(x) = \begin{bmatrix}B_1(x) & \hdots & B_t(x)\end{bmatrix}^T$ is a vector of CBFs.
+The resulting SOS constraints are summarized below.
+A detailed derivation of the SOS constraint \cref{eq:sos_constraint_incompatible} from the empty-set condition \cref{eq:empty-set_conditions} is given in the supplementary material in \cite{schneeberger2024advanced}.
+\begin{subequations} \label{eq:sos_constraint_incompatible}
+   \begin{align}
+      \begin{split} \label{eq:sos_constraint_incompatible_cbf}
+         -\nabla B_i^T \left ( s_i f + G p_i \right ) &\in \textbf M(B_i, -B_{\mathcal I_t})
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_incompatible_clf}
+         -\nabla V^T \left ( s_0 f + G p_0 \right ) - s_0 d &\in \textbf M(V, -B_{\mathcal I_t})
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_incompatible_cbf_un}
+         -\nabla V^T \left ( f + G u_n \right ) - d &\in \textbf M(V, -V),
+      \end{split}
+   \end{align}
+\end{subequations}
+for some $p_i \in (R[x])^m$ and $s_i \in \Sigma[x]$, $i \in \{ 0 \} \cup \mathcal I_t$.
+For clarity, we omit the brackets and variables in the function notation.
+\afterReviewChangedBox{To achieve the simultaneous satisfaction of CBF and CLF conditions \cref{eq:cbf_condition,eq:clf_condition} with a single input $u := p(x) / s(x)$ on $\partial \mathcal X_s$, as specified in \cref{prob:finding_cbfs_and_clf}, we equate the polynomials $p_i(x)$ and $s_i(x)$, $i \in \{ 0 \} \cup \mathcal I_t$.}
+The resulting SOS constraints are given as:
+\begin{subequations} \label{eq:sos_constr}
+   \begin{align}
+      \begin{split} \label{eq:sos_constraint_cbf}
+         -\nabla B_i^T \left ( s f + G p \right ) &\in \textbf M(B_i, -B_{\mathcal I_t})
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_clf}
+         -\nabla V^T \left ( s f + G p \right ) - s d &\in \textbf M(V, -B_{\mathcal I_t})
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_nom}
+         -\nabla V^T \left ( f + G u_n \right ) - d &\in \textbf M(V, -V),
+      \end{split}
+   \end{align}
+\end{subequations}
+for $i \in \mathcal I_t$, and some $p \in (R[x])^m$, and $s \in \Sigma[x]$.
+
+\begin{remark}
+   \textit{
+      The polynomials $p(x)$ and $s(x)$ induce (after dividing \cref{eq:sos_constraint_cbf} and \cref{eq:sos_constraint_clf} by $s(x)$) a rational controller $u_\text{SOS}(x) := p(x) / s(x)$, employed to prove compatibility of the CBFs $B_i(x)$ and CLF $V(x)$.
+   }
+\end{remark}
+
+The proof of \cref{lem:sos_constraint_sufficient} can be found in the appendix.
+\begin{lemma} \label{lem:sos_constraint_sufficient}
+   If $s(x) > 0$ and \cref{ass:regular_safe_set} is satisfied, then the SOS constraints in \cref{eq:sos_constr} are sufficient conditions for the CBF and CLF property in \cref{eq:cbf_condition,eq:clf_condition,eq:forward_invariant_nominal_region} to hold simultaneously with $u := p(x) / s(x)$.
+\end{lemma}
+
+The SOS constraints in \cref{eq:sos_constr} imply the inequalities since $p\in \Sigma[x]$ implies $p(x) \geq 0$:
+\begin{subequations} \label{eq:sos_constraint_inequality}
+   \begin{align}
+      \begin{split} \label{eq:sos_constraint_inequality_cbf}
+         \nabla B_i^T \left ( s f + G p \right ) + \gamma_{0,i} B_i - \gamma_{1,i}^T B_{\mathcal I_t} &\leq 0 
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_inequality_clf}
+         \nabla V^T \left ( s f + G p \right ) + s d + \gamma_{0,0} V - \gamma_{1,0}^T B_{\mathcal I_t} &\leq 0
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_inequality_nom}
+         \nabla V^T \left ( f + G u_n \right ) + d + \gamma_n V &\leq 0,
+      \end{split}
+   \end{align}
+\end{subequations}
+for some $\gamma_{0,i}, \gamma_n \in R[x]$, $p \in (R[x])^m$, $s, \gamma_{0,0} \in \Sigma[x]$, and $\gamma_{1,i}, \gamma_{1,0} \in (\Sigma[x])^t$, $i \in \mathcal I_t$.
+
+\afterReviewChangedBox{\cref{lem:sos_constraint_sufficient} only provides sufficient conditions.
+However, adding an arbitrary small perturbation $\epsilon > 0$ to the SOS constraints in \cref{eq:sos_constr} results in necessary conditions when restricting to rational controllers $u_\text{SOS}(x) = p(x) / s(x)$.
+This is because \cref{eq:cbf_condition,eq:clf_condition,eq:forward_invariant_nominal_region} with $u := u_\text{SOS}(x)$ imply strict inequalities involving $\epsilon$ as follows: $p(x) \leq 0$ implies $p(x) - \epsilon < 0$.
+These strict inequalities imply the SOS constraints \cref{eq:sos_constr} perturbed by $\epsilon$ according to \cref{eq:thm:putinars_psatz}.
+Hence, for all practical purposes, the solution set of the SOS constraints in \cref{eq:sos_constr} encompasses the desired set of CBFs and CLFs.}
+
+
+
+\subsection{SOS formulation of input constraints} \label{sec:input_sos_constraints}
+
+In the following, we consider two types of inputs constraints: linear and quadratic input constraints.
+Consider the linear input constraint set
+\begin{align} \label{eq:linear_input_constraints}
+   \mathcal U = \{ u \mid A u \leq b \},
+\end{align}
+where $A \in \R^{m \times l}$ and $b \in \R^l$.
+These linear input constraints can be encoded by the SOS constraints:
+\begin{align} \label{eq:linear_input_sos_constraints}
+   \begin{split}
+      -a_i p(x) + b_i s(x) \in \textbf M(-B_{\mathcal I_t}),
+   \end{split}
+\end{align}
+where $a_i$ is the $i$th row of $A$, $i \in \mathcal I_l$, and $p(x)$ and $s(x)$ are as in \cref{eq:sos_constr}.
+Next, we consider the quadratic input constraint
+\begin{align} \label{eq:quadratic_input_constraints}
+   \mathcal U = \{ u \mid (u - u_0)^T Q_u (u - u_0) \leq u_\text{max}^2 \},
+\end{align}
+for some $Q_u \succeq 0$ and $u_0 \in \R^m$.
+The quadratic input constraint \cref{eq:quadratic_input_constraints} can be encoded using the SOS constraint involving variables $x \in \R^n$ and $v \in \R^m$:
+\begin{align} \label{eq:quadratic_input_sos_constraints}
+   \begin{split}
+      &- v^T Q_u \left ( p(x) - s(x) u_0 \right ) + s(x) u_\text{max}^2 \in \textbf M(-f_u, -B_{\mathcal I_t}),
+   \end{split}
+\end{align}
+where $f_u(x, v) := v^T Q_u v - u_\text{max}^2 \in R[x,v]$ encodes the input constraint set in \cref{eq:quadratic_input_constraints}.
+The following lemma establishes the implication of the input constraints based on the SOS constraints.
+The proof is reported in the appendix.
+\begin{lemma} \label{lem:quadratic_input_sos_constraints}
+   If $s(x) > 0$, a solution $p(x)$ and $s(x)$ to the SOS constraint \cref{eq:linear_input_sos_constraints}, resp. \cref{eq:quadratic_input_sos_constraints}, also satisfies the input constraints \cref{eq:linear_input_constraints}, resp. \cref{eq:quadratic_input_constraints}, with $p(x)/s(x) \in \mathcal U$ for all $x \in \mathcal X_s$.
+\end{lemma}
+
+
+
+\subsection{Safe set and nominal region requirement}
+
+In this section, we express the containment conditions of the allowable set $\mathcal X_a$, the safe set $\mathcal X_s$ and the nominal region $\mathcal X_n$, as defined in \cref{eq:xs_subsetneq_xa_i,eq:xn_subsetneq_xs} (cf. \cref{fig:safe_and_noinal_region}), in terms of SOS constraints.
+A slightly more stringent condition compared to \cref{eq:xs_subsetneq_xa_i}, can be expressed as the empty-set condition for all $i \in \mathcal I_t$:
+\begin{align} \label{eq:xs_subsetneq_xa_emptyset}
+   \{ x \mid B_i(x) \leq 0, w_i(x) \geq 0 \} = \emptyset.
+\end{align}
+Using Putinar's P-satz in \cref{eq:thm:putinars_psatz}, we translate \cref{eq:xs_subsetneq_xa_emptyset} into the SOS constraints for all $i \in \mathcal I_t$:
+\begin{align} \label{eq:sos_constraint_xs_subsetneq_xa}
+   B_i \in \textbf M(w_i).
+\end{align}
+Similarly, the containment condition of $\mathcal X_n$ inside $\mathcal X_s$ in \cref{eq:xn_subsetneq_xs}, can be expressed as the empty-set condition for all $i \in \mathcal I_t$:
+\begin{align} \label{eq:xn_subsetneq_xs_emptyset}
+   \{ x \mid V(x) \leq 0, B_i(x) \geq 0 \} = \emptyset.
+\end{align}
+Using Putinar's P-satz, we translate \cref{eq:xn_subsetneq_xs_emptyset} into the SOS constraints for all $i \in \mathcal I_t$:
+\begin{align} \label{eq:sos_constraint_xn_subsetneq_xs}
+   -B_i \in \textbf M(V).
+\end{align}
+
+
+
+\subsection{Resulting SOS problem}
+
+The solution to \cref{prob:finding_cbfs_and_clf}, i.e., finding suitable functions $B_i(x)$, $i \in \mathcal I_t$, and $V(x)$ can be obtained by solving the following SOS optimization problem:
+\begin{align} \label{eq:sos_opt_prob}
+   \hspace{-\leftmargin}
+   \begin{array}{ll}
+      \mbox{find} & V, B_i, p \in (\R[x])^m, s \in \Sigma[x], \\
+      \mbox{maximize} & \text{vol}(\mathcal X_s) \\
+      \mbox{subject to} & \text{\cref{eq:sos_constr,eq:linear_input_sos_constraints,eq:quadratic_input_sos_constraints,eq:sos_constraint_xs_subsetneq_xa,eq:sos_constraint_xn_subsetneq_xs}} \\
+      & s - \epsilon \in \Sigma[x], \\
+   \end{array}
+\end{align}
+where \cref{eq:sos_constr} encode the CBF and CLF condition, \cref{eq:linear_input_sos_constraints,eq:quadratic_input_sos_constraints} encode linear and quadratic input constraints, \cref{eq:sos_constraint_xs_subsetneq_xa,eq:sos_constraint_xn_subsetneq_xs} encode the set containment properties, and a constant $\epsilon > 0$ assures that $s(x) > 0$.
+
+\subsection{Alternating Algorithm}
+
+\afterReviewChangedBox{The solution of the SOS problem \cref{eq:sos_opt_prob} can be found by iteratively alternate between searching over one set of decision variables while keeping the others fixed, see \cite{TanPackard:04,schneeberger2023sos}.
+In this process, either constraint margins are minimized or the volume of $\mathcal X_s$ is maximized.
+The volume is approximated by the summation of traces of $Q_{B_i}$ in $B_i(x) = Z_{B,i}(x)^T Q_{B,i} Z_{B,i}(x)$, similar to the approach in \cite{WangHan:18,KunduGeng:19}.
+Such an alternating algorithm requires a feasible initialization of the decision variables that are kept fixed in the first iteration.
+This is achieved through an initialization procedure that starts with an initially empty region of interest and expands it until it encompasses the allowable set $\mathcal X_a$.
+For more details, we refer the reader to 
+\cref{sec:supplementary_material}.}
+% the supplementary material in \cite{schneeberger2024advanced}.}
+
+
+
+
+
+
+\section{Safety Filter Implementation} \label{sec:online_controller}
+
+\begin{afterReviewChanged}
+
+The objective of this section is to implement the advanced safety filter as specified in \cref{prob:finding_safety_filter}.
+Given a linear and quadratic input constraints set $\mathcal U$, we propose the following realization of the Quadratically Constrained Quadratic Program (QCQP) in closed loop for every state $x \in \R^n$ along the trajectory:
+\begin{align} \label{eq:qcqp_based_controller}
+   \begin{array}{llll}
+      u_s(x) := &\underset{u \in \mathcal U}{\mbox{min}} & \| u_n(x) - u \|^2 \\
+      &\mbox{s.t.} & C(x) u + b(x) \leq r(x), \\
+   \end{array}
+\end{align}
+where
+\begin{subequations} \label{eq:qcqp_based_controller_constraints}
+   \begin{align}
+      C(x) &:= \begin{bmatrix}
+         \nabla V(x)^T G(x) \\
+         \nabla B_1(x)^T G(x) \\
+         \vdots \\
+         \nabla B_t(x)^T G(x) \\
+      \end{bmatrix} \\
+      b(x) &:= \begin{bmatrix}
+         \nabla V(x)^T f(x) + d(x) \\
+         \nabla B_1(x)^T f(x) \\
+         \vdots \\
+         \nabla B_t(x)^T f(x)
+      \end{bmatrix}
+   \end{align}
+\end{subequations}
+encode the CLF and CBF conditions \cref{eq:cbf_condition,eq:clf_condition}.
+The smooth functions $r(x) = \begin{bmatrix} r_1(x) & \hdots & r_t(x) \end{bmatrix}$ are state-dependent slack variables.
+Within the domain of CLF and CBF conditions \cref{eq:cbf_condition,eq:clf_condition}, they must satisfy the upper bounds, given by:
+\begin{align} \label{eq:r0_upper_bound}
+   r_0(x) \leq 0
+\end{align}
+for all $x \in \mathcal X_t$, and
+\begin{align} \label{eq:ri_upper_bound}
+   r_i(x) \leq 0
+\end{align}
+for all $i \in \mathcal I_t$ and $x \in \partial \mathcal X_s$.
+On the one hand, selecting a larger positive value for $r_0(x)$ within $\mathcal X_n$ (i.e. outside the domain of the CLF condition) increases the allowed dissipation rate violation in terms of larger values of $\dot V(x) = \nabla V(x)^T \dot x$.
+On the other hand, selecting a larger positive value for $r_i(x)$, $i \in \mathcal I_t$, within $\mathcal X_s$ (i.e. outside the domain of the CBF condition) increases the allowed safety violation in terms of larger positive values of $\dot B(x) = \nabla B(x)^T \dot x$.
+This renders the safety filter more passive within the interior of the safe set, and thus leaves more room to satisfy the CLF constraint.
+However, an overly large value for $r_i(x)$, $i \in \mathcal I_t$, can result in abrupt modifications of the control action when approaching the boundary of the safe set.
+
+\begin{remark}
+   \textit{
+      In the literature on safety filters, see for example \cite{AmesCoogan:19}, the negative of the allowed dissipation rate and the safety violation are usually specified by class $\mathcal K$ functions $\alpha(V(x))$ and $\gamma_i(B_i(x))$:
+      \begin{subequations}
+         \begin{align}
+            &\nabla V(x)^T (f(x) + G(x) u) \leq -\alpha(V(x)), \\
+            &\nabla B_i(x)^T (f(x) + G(x) u) \leq -\gamma_i(B_i(x)) \quad i \in \mathcal I_t.
+         \end{align}
+      \end{subequations}
+      In this case, the class $\mathcal K$ functions $\alpha$ and $\gamma_i$ depend on the value of $V(x)$ and $B_i(x)$.
+      However, in \cref{eq:qcqp_based_controller_constraints}, we consider a broader class of the allowed dissipation rate violation $r_0(x)$ and allowed safety violation, $r_i(x)$, $i \in \mathcal I_t$, to ensure a smooth safety filter behavior, while satisfying further requirements presented below.
+   }
+\end{remark}
+
+To ensure perfect tracking of the legacy controller $u_n(x)$ within $\mathcal X_n$ (cf. \cref{eq:sf_inactive_condition}), we further lower bound $r(x)$ as: %require that
+\begin{align} \label{eq:r_lower_bound_un_tracking}
+   C(x) u_n(x) + b(x) \leq r(x)
+\end{align}
+for all $x \in \mathcal X_n$.
+Indeed, condition \cref{eq:r_lower_bound_un_tracking} ensures that the cost of the QCQP in \cref{eq:qcqp_based_controller} can be minimized to zero within $\mathcal X_n$ with $u = u_n(x)$, making $u_s(x)$ coincide with $u_n(x) \in \mathcal U$.
+To ensure existence of $r(x)$ satisfying lower and upper bounds \cref{eq:r0_upper_bound,eq:ri_upper_bound,eq:r_lower_bound_un_tracking}, we need to show for $r_0(x)$ that $\nabla V(x)^T \left ( f(x) + G(x) u_n(x) \right ) + d(x) \leq 0$ on the intersection of $\mathcal X_t$ (cf. \cref{eq:r0_upper_bound}) and $\mathcal X_n$ (cf. \cref{eq:r_lower_bound_un_tracking}).
+This is however directly ensured by forward invariance condition \cref{eq:forward_invariant_nominal_region}.
+Furthermore, we need to show for $r_i(x)$, $i \in \mathcal I_t$, that $\nabla B_i(x)^T \left ( f(x) + G(x) u_n(x) \right ) \leq 0$ on the intersection of $\partial \mathcal X_s$ (cf. \cref{eq:ri_upper_bound}) and $\mathcal X_n$ (cf. \cref{eq:r_lower_bound_un_tracking}).
+This is however automatically satisfied as the domains do not overlap due to the containment condition \cref{eq:xn_subsetneq_xs}.
+
+Additionally, the selection of $r(x)$ must be lower-bounded to ensure the feasibility of the QCQP \cref{eq:qcqp_based_controller} within $\mathcal X_t$, as \cref{eq:r_lower_bound_un_tracking} already ensures feasibility within $\mathcal X_n$.
+Although the exact lower bound is unknown, it can be approximated using a feasible (but not necessarily optimal) solution $u_\text{sos}(x)$ from \cref{sec:sos_optimization}:
+\begin{align} \label{eq:r_lower_bound_feasibility}
+   C(x) u_\text{sos}(x) + b(x) \leq r(x),
+\end{align}
+for all $x \in \mathcal X_t$.
+To guarantee the existence of such an $r(x)$, note that the lower bound \cref{eq:r_lower_bound_feasibility} satisfies the upper bound conditions \cref{eq:r0_upper_bound,eq:ri_upper_bound} as a result of the SOS constraints \cref{eq:sos_constraint_cbf,eq:sos_constraint_clf}.
+
+
+Finally, to establish local Lipschitz-continuity of the proposed safety filter, we need the following assumption.
+\begin{assumption}[LICQ] \label{ass:licq}
+   The Linear Independence Constraint Qualification (LICQ) is satisfied for the QCQP in \cref{eq:qcqp_based_controller_constraints} across all states $x$ and inputs $u$, that is, the gradients w.r.t. $u$ of the active inequality constraints in \cref{eq:qcqp_based_controller_constraints} are linearly independent.
+   Equivalently, the rows of $C(x)$ associated with the active inequality constraints are linearly independent.
+\end{assumption}
+\begin{remark}
+   \textit{
+      By extending the QCQP in \cref{eq:qcqp_based_controller_constraints} with a slack variable $\delta \in \R^{t+1}$ as in \cite{ames2016control}
+      \begin{align*}
+         \begin{array}{llll}
+            u_s(x) := &\underset{(u,\delta) \in \mathcal U \times \R^{t+1}}{\mbox{argmin}} & \| u_n(x) - u \|^2 + \lambda \| \delta \|^2 \\
+            &\mbox{s.t.} & C(x)^T u + b(x) \leq \delta, \\
+         \end{array}
+      \end{align*}
+      we automatically satisfy the LICQ property, as demonstrated in \cite{ames2016control}.
+      However, the introduction of these slack variables pose the potential risk of compromising safety and finite-time convergence guarantees.
+      That being said, the LICQ assumption can easily be checked, and it generically holds true, i.e., for almost all polynomial coefficients, the Jacobian of a set of polynomials has full rank.
+   }
+\end{remark}
+
+The local Lipschitz-continuity not only preserves existence and uniqueness of solutions (cf. \cite{Khalil:02}[Theorem 3.1]), but can also avoid the resulting feedback controller from chattering, as explained in \cite{morris2013sufficient}.
+The following theorem establishes local Lipschitz-continuity of the developed QCQP controller.
+Its proof can be found in the appendix.
+\begin{theorem} \label{thm:lipschitz_continuity}
+   Under \cref{ass:licq},
+   given a smooth $B(x)$ and $V(x)$ as specified in \cref{prob:finding_cbfs_and_clf},
+   a smooth legacy controller $u_n(x)$,
+   and twice differentiable $r_i(x)$, $i \in \{0\} \cup \mathcal I_t$, lower bounded by \cref{eq:r_lower_bound_feasibility},
+   then $u_s(x)$ as defined in \cref{eq:qcqp_based_controller_constraints} is locally Lipschitz-continuous on the safe set $\mathcal X_s$.
+\end{theorem}
+
+We can find polynomial candidates $r(x)$ based on given CBF $B(x)$ and CLF $V(x)$ by solving an additional SOS problem that encodes the upper and lower bounds \cref{eq:r0_upper_bound,eq:ri_upper_bound,eq:r_lower_bound_un_tracking,eq:r_lower_bound_feasibility}.
+
+\end{afterReviewChanged}
+
+
+
+
+
+\section{Power Converter Case Study} \label{sec:simulations}
+
+The proposed safety filter is implemented for a vector field realization of an ac/dc power converter model connected to an infinite bus, as illustrated in \cref{fig:power_converter_schematic}.
+A feedback controller that avoids unsafe states is crucial for this application since all electrical variables (e.g. voltages and currents) need to be constrained at all times.
+For more details about the modelling of power converters, we refer the reader to \cite{mohan2003power}.
+
+\begin{figure}[!t]
+   \centering
+   \resizebox{85mm}{!}{\includegraphics{images/5_power_converter_schematic}}
+   \caption{
+      The schematic is presented in the (dq) rotating frame, compromising a DC-link, 3-phase bridge, and an ac-line connected to an infinite bus $v_g$. Assuming the average-value model for the 3-phase bridge, the input $\bar u = \begin{bmatrix}m_d & m_q\end{bmatrix}^T$ determines the converter voltage $v_c$ as a function of the dc-link voltage $v_{dc}$. Likewise, the dc-current flowing into the capacitor $c_{dc}$ is given by the input $\bar u$ and the ac-line current $i = \begin{bmatrix}i_d & i_q\end{bmatrix}^T$. The states consisting of the dc-link voltage $v_{dc}$ and the line-current $i$ are measured.}
+   \label{fig:power_converter_schematic}
+\end{figure}
+
+The signals are represented in the (dq) rotating frame aligned with the phase $\theta = \omega_n t$ of the grid voltage $v_g$, where $\omega_n = 2 \pi 50$ is the nominal angular frequency in Hz.
+The signals are given in per-unit representation.
+The system's dynamics are given as follows:
+\begin{subequations} \label{eq:power_converter_system_model}
+\begin{align}
+   (1/\omega_n) c_{dc} \dot v_{dc} &= - g_{dc} v_{dc} - i_d m_d - i_q m_q \\
+   (1/\omega_n) l \dot i_d &= \omega l i_q + v_{dc} m_d - 1 \\
+   (1/\omega_n) l \dot i_q &= -\omega l i_d + v_{dc} m_q,
+\end{align}
+\end{subequations}
+where $l = 0.01$ is the inductance in p.u. consisting of transformer and line inductance, $c_{dc} = 0.02$ is the dc-link capacitance in p.u., and $g_{dc} := 1/r_{dc} = 0.001$ is the admittance of the DC-link capacitor in p.u.
+The measured states are denoted by $\bar x := \begin{bmatrix}v_{dc} & i_d & i_q\end{bmatrix}^T$, and the input is given by $\bar u := \begin{bmatrix}m_d & m_q\end{bmatrix}^T$, describing the modulation indices.
+The objective is to stabilize both the DC-link voltage $v_{dc}$ to $1$, and the quadrature current $i_q$ to its reference $i_{q,ref}$, which is assumed to be constant.
+As a consequence, to meet the steady-state specifications, the direct current $i_d$ is stabilized to $-g_{dc}$.
+The allowable set of states must adhere to the following inequality constraints:
+\begin{align} \label{eq:power_converter_state_constraints}
+   0.2 \leq v_{dc} \leq 1.2, \quad i_d^2 + i_q^2 \leq (1.2)^2.
+\end{align}
+Furthermore, the quadratic input constraint $\mathcal U$ is given by
+\begin{align} \label{eq:power_converter_input_constraints}
+   m_d^2 + m_q^2 \leq (1.2)^2.
+\end{align}
+The system's equilibrium is characterized by
+\begin{align*}
+   x^* = \begin{bmatrix}
+      1 \\ -g_{dc} \\ i_{q,ref}
+   \end{bmatrix},
+   u^* = \begin{bmatrix}
+      1 - \omega l i_{q,ref} \\ -\omega l g_{dc}
+   \end{bmatrix}.
+\end{align*}
+We introduce the error coordinates for the states $x = \bar x - x^* = \begin{bmatrix}\tilde v_{dc} & \tilde i_d & \tilde i_q\end{bmatrix}^T$ and the input variables $u = \bar u - u^* = \begin{bmatrix}\tilde m_d & \tilde m_q\end{bmatrix}^T$ such that $\dot x = 0$ at $x=0$ and $u=0$.
+The system represented in error coordinates is described by system \cref{eq:control_system} with
+\begin{subequations}
+   \begin{align*}
+      f(x) = \begin{bmatrix}
+         -0.05 \tilde v_{dc} - 57.9 \tilde i_d + 0.00919 \tilde i_q \\
+         1710 \tilde v_{dc} + 314 \tilde i_q \\
+         -0.271 \tilde v_{dc} - 314 \tilde i_d
+      \end{bmatrix}
+   \end{align*}
+   \begin{align*}
+      G(x) = \begin{bmatrix}
+         0.05 - 57.9 \tilde i_d & -57.9 \tilde i_q \\
+         1710 + 1710 \tilde v_{dc} & 0 \\
+         0 & 1710 + 1710 \tilde v_{dc}
+      \end{bmatrix}.
+   \end{align*}
+\end{subequations}
+We consider a legacy controller that resembles the proportional part of the synchronous rotating frame control structure, as described in \cite{blaabjerg2006overview}:
+\begin{align*}
+   u_n(x) = \begin{bmatrix}
+      0.1 \tilde v_{dc} - \tilde i_d \\
+      i_{q,ref} - \tilde i_q
+   \end{bmatrix}.
+\end{align*}
+In the following subsection, we first consider a single quadrature current reference set to $i_{q,ref} = 0$.
+Then, we introduce a quadrature current reference as a new state to the dynamical system, with a zero time-derivative, i.e., ${\dot i}_{q,ref} = 0$.
+\afterReviewChangedBox{For each scenario, we find the CBFs $B_i(x)$ and CLF $V(x)$ (cf. \cref{prob:finding_cbfs_and_clf}), and perform simulations that illustrate the additional guarantees provided by the advanced safety filter $u_s(x)$ compared with a standard safety filter implementation.}
+We use \texttt{CVXOPT} \textit{Python} library to solve the SDPs of the alternating algorithm, and to implement the QCQP in \cref{eq:qcqp_based_controller}.
+This library implements an optimization problem solver based on second-order and positive semidefinite cones.
+The simulations are performed using the ODE solver from \texttt{scipy} with a sampling time of $1$ $\mu s$.
+\afterReviewChangedBox{The full code used for simulations and optimization is publicly available online\footnote{https://github.com/MichaelSchneeberger/advanced-safety-filter/}.}
+
+\begin{figure*}[!t]
+   \centering
+   \setkeys{Gin}{width=0.24\linewidth}
+   \subfloat[\label{fig:stream_plot1}]{\resizebox{59mm}{!}{\includegraphics{images/6a_unconstraint_input}}}
+   \hfil
+   \subfloat[\label{fig:stream_plot2}]{\resizebox{59mm}{!}{\includegraphics{images/6b_constraint_input}}}
+   \hfil
+   \subfloat[\label{fig:stream_plot3}]{\resizebox{59mm}{!}{\includegraphics{images/6c_iq_reference}}}
+   \caption{
+      The allowable set $\mathcal X_a$, the safe set $\mathcal X_s$, and the nominal region $\mathcal X_n$ projected to the $\tilde v_{dc}$ and $\tilde i_d$ coordinate are shown for $\tilde i_q = i_{q,ref} = 0$. 
+      In addition, the zero-level sets of the polynomials $B_1(x)$ and $B_2(x)$ are shown in grey.
+      Three scenarios are shown, where (a) the input action is subjected to no constraints, i.e. $u(x(t)) \in \R^m$, (b) the input action is subjected to a quadratic constraint given by $u(x(t)) \in \mathcal U := \{ u \mid u^T u \leq 1.3 \}$, and (c) $i_{q,ref}$ is integrated as a new state of the dynamical system using the same input constraints.
+      The corresponding vector field $\dot x = f(x) + G(x) u_{sos}(x)$ (projected to $(\tilde v_{dc}, \tilde i_d)$ coordinates) is shown in blue, where $u_{sos}(x) = p(x)/s(x)$ is used to ensure compatibility between the CBF and CLF.
+   }
+   \label{fig:stream_plot}
+\end{figure*}
+
+
+
+\subsection{Zero quadrature current reference tracking}
+
+In this subsection, we assume a zero quadrature current reference, i.e., $i_{q,ref} = 0$.
+The allowable set $\mathcal X_a$, as expressed in \cref{eq:allowable_set}, encoding the state constraints \cref{eq:power_converter_state_constraints}, are achieved through the following polynomials:
+\begin{subequations}
+   \begin{align*}
+      w_1(x) &= ((\tilde v_{dc} + 0.3)/0.5)^2 + (\tilde i_d/20)^2 + (\tilde i_q/20)^2 - 1 \\
+      w_2(x) &= (\tilde v_{dc}/20)^2 + ({\tilde i_d}/1.3)^2 + ({\tilde i_q}/1.3)^2 - 1.
+   \end{align*}
+\end{subequations}
+
+Figures \ref{fig:stream_plot} (a) and (b) illustrates the safe set $\mathcal X_s$ and the nominal set $\mathcal X_n$ computed by the algorithm both without and with considering inputs constraints.
+\cref{tab:number_of_var_and_constr} summarizes both the number of variables associated with the respective SDPs and the number of constraints, derived from the summation of triangular elements within the positive semidefinite matrices.
+The initialization procedure completed in 10 iterations, where each iteration took around 10 seconds.
+The main algorithm completed in 20 iterations, where each iteration took around 14 seconds.
+The degree of the polynomials are given in \cref{tab:polynomial_degrees}.
+
+\begin{table}[!t]
+   \caption{Summary of SDP variables and constraints}
+   \label{tab:number_of_var_and_constr}
+   \centering
+   \begin{tabular}{||cccccc||} 
+      \hline
+      Scenario & & init 1 & init 2 & main 1 & main 2 \\ \hline\hline
+      Fig. \ref{fig:stream_plot}(a) & Variables & 475 & 187 & 410 & 475 \\
+      & Constraints & 5726 & 4425 & 5807 & 5726 \\ \hline
+      Fig. \ref{fig:stream_plot}(b) & Variables & 506 & 197 & 441 & 506 \\
+      & Constraints & 6102 & 4765 & 6183 & 6102 \\ \hline
+      Fig. \ref{fig:stream_plot}(c) & Variables & 1086 & 357 & 981 & 1086 \\
+      & Constraints & 21277 & 17327 & 21474 & 21277 \\ \hline
+   \end{tabular}
+\end{table}
+\begin{table}[!t]
+   \caption{Degree of the polynomials encoding the CLF, CBF, and the rational controller}
+   \label{tab:polynomial_degrees}
+   \centering
+   \begin{tabular}{||c@{\hskip 0.04in} c@{\hskip 0.04in} c@{\hskip 0.04in} c||} \hline
+      $V(x)$ & $B_i(x)$ & $p(x)$ & $s(x)$ \\ \hline\hline
+      4 & 4 & 3 & 2 \\ \hline
+   \end{tabular}
+\end{table}
+
+\afterReviewChangedBox{The proposed safety filter introduces additional guarantees, which make it more stringent and, as noted in the introduction, more suitable in already established industrial setups. 
+However, due these system requirements, it now represents a new category that prioritizes the preservation of the legacy control, enhancing composability, preventing a direct performance comparison between conventional safety filters and our novel setup.
+Nonetheless, side-by-side plots in \cref{fig:simulation_convergence_rate} are included that illustrate the additional guarantees compared to a basic safety filter in selected scenarios.
+The advanced safety filter $u_s(x)$ is based on the previously computed CLF $V(x)$ and CBFs $B_1(x)$ and $B_2(x)$, and is compared to a basic safety filter $u_\text{SF}(x)$ using the same CBFs:
+\begin{align} \label{eq:basic_safety_filter}
+   \begin{array}{lll}
+      \underset{u \in \mathcal U}{\mbox{argmin}} & \| u_n(x) - u \|^2 \\
+      \mbox{s.t.} & \nabla B_1(x) (f(x) + G(x) u) + \alpha \left ( B_1(x) \right ) \leq 0 \\
+      & \nabla B_2(x) (f(x) + G(x) u) + \alpha \left ( B_2(x) \right ) \leq 0,
+   \end{array}
+\end{align}
+where $\alpha(B_i(x)) := 10 B_i(x)$ is selected.}
+
+\begin{figure}[!t]
+   \centering
+   \includegraphics[width=86mm]{images/8_simulation_convergence_rate}
+   \caption{(Convergence to the nominal region $\mathcal X_n$):
+      While the advanced safety filter $u_s(x)$ essentially overlaps the legacy control $u_n$,
+      the basic safety filter $u_\text{SF}(x)$ suboptimally perturbs the legacy control action, resulting in a much slower convergence.
+   }
+   \label{fig:simulation_convergence_rate}
+\end{figure}
+
+
+\afterReviewChangedBox{Moreover, a side-by-side plots in \cref{fig:simulation_constraint_violation} illustrate the effect on including quadratic input constraints into the design of the safety filter.
+We consider the integration of quadratic input constraints into the SOS constraint as a contribution distinct from the discussion on the safety filter's role in preserving the legacy control action. 
+However, for consistency, the simulations were performed using the previous setup, which including an advanced safety filter and the basic safety filter in \cref{eq:basic_safety_filter}.}
+Since the input constraints are incorporated into the design of the CLF and CBFs, the safety filter $u_s(x)$ successfully stays within the state constraints for all $t \geq 0$.
+This is not true for a basic safety filter $u_\text{SF}(x)$, which does not consider the input constraints in its design.
+In this case, the norm of the input action $\| u_\text{SF}(x) \|$ exceeds the input constraint limit of $1.3$ p.u. in the beginning of the simulation (cf. \cref{fig:simulation_constraint_violation}).
+To produce a valid input, the input action $u_\text{SF}(x)$ is projected to the set of feasible input set $\mathcal U$.
+As a result, the trajectory deviates from its intended path, leading to a violation of the dc-link voltage constraint.
+
+\begin{figure}[!t]
+   \centering
+   \includegraphics[width=86mm]{images/7_simulation_constraint_violation}
+   \caption{(Forward invariance of the safe set $\mathcal X_s$): 
+      While the advanced safety filter $u_s(x)$, which considers the quadratic input constraints into the design, successfully stays within the state constraints, whereas the legacy controller $u_n$ and basic safety filter $u_\text{SF}(x)$ violate the state constraints.
+   }
+   \label{fig:simulation_constraint_violation}
+\end{figure}
+
+
+\subsection{Including current reference tracking}
+
+For this subsection, the objective is to stabilize both the DC-link voltage to $1$, and the quadrature current to some (not yet a priori pre-specified) quadrature current reference $i_{q,ref}$.
+To render our design parametric in $i_{q,ref}$, we introduce a new state representing the quadrature current reference.
+Consequently, we augment the dynamics from \cref{eq:power_converter_system_model} with $\dot i_{q,ref} = 0$.
+
+\begin{remark}
+   \textit{
+      \afterReviewChangedBox{Although the reference $i_{q,ref}$ is assumed constant for the design of the CBFs and CLF, step-wise adjustments to $i_{q,ref}$ over time (corresponding to task cycles of the digital processing unit) do not compromise safety, provided the state remains within the safe set $\mathcal X_s$.}
+   }
+\end{remark}
+
+The corresponding coordinates of the states and inputs are given by $x = \begin{bmatrix}\tilde v_{dc} & \tilde i_d & \tilde i_q & \tilde i_{q,ref}\end{bmatrix}^T$ and $u := \begin{bmatrix}\tilde m_d & \tilde m_q\end{bmatrix}^T$, where $\tilde i_{q,ref} = i_{q,ref}$.
+The allowable set $\mathcal X_a$ is chosen through the following polynomials:
+\begin{align*}
+   w_1(x) &= ((\tilde v_{dc} + 0.3)/0.5)^2 + (\tilde i_d/20)^2 + (\tilde i_q/20)^2 \\
+   &+ (\tilde i_{q,ref}/20)^2 - 1 \\
+   w_2(x) &= (\tilde v_{dc}/20)^2 + ({\tilde i_d}/1.3)^2 + ({\tilde i_q}/1.3)^2 \\
+   &+ (\tilde i_{q,ref}/20)^2 - 1.
+\end{align*}
+
+Correspondingly, a safe set $\mathcal X_s$ and the nominal region $\mathcal X_n$ can be computed for this 4-dimensional space.
+\cref{fig:stream_plot}(c) illustrates the safe set $\mathcal X_s$ and the nominal set $\mathcal X_n$ for $i_q = i_{q,ref} = 0$.
+\cref{tab:number_of_var_and_constr} summarizes the number of variables of the corresponding SDP for each part, as well as the number of constraints.
+The initialization procedure completed in 51 iterations, where each iteration took around 60 seconds.
+The main algorithm completed in 20 iterations, where each iteration took around 90 seconds.
+The degree of the polynomials are summarized in \cref{tab:polynomial_degrees}.
+
+The simulation shown in \cref{fig:simulation_iqref_tracking} illustrates the reference tracking performance of our safety filter $u_s(x)$ compared to the basic safety filter $u_\text{SF}(x)$ introduced in the previous subsection.
+The safety filter, although slightly perturbing the legacy controller, guarantees finite-time convergence to the nominal set defined for a quadrature current reference $i_{q,ref}$ of $1$.
+However, the basic safety filter $u_\text{SF}(x)$ perturbs the legacy control action, leading to a much slower convergence.
+In general, as we approach the boundary of the safe set by increasing $i_{q,ref}$, the basic safety filter is more likely to intervene the legacy control action.
+
+\begin{figure}[!t]
+   \centering
+   \includegraphics[width=86mm]{images/9_simulation_iqref_tracking.pdf}
+   \caption{(Quadrature current reference tracking): 
+      The closed-loop simulation demonstrates the finite-time convergence guarantee of the advanced safety filter $u_s(x)$ towards the nominal region $\mathcal X_n$ for non-zero quadrature current reference $i_{q,ref} = 1$p.u.
+      Additionally, the advanced safety filter exhibits a faster convergence to the equilibrium compared to the basic safety filter $u_\text{SF}(x)$.
+      The latter is more likely to disturb the legacy control action as the quadrature current reference $i_{q,ref}$ approaches the boundary of the safe set, resulting in a slower convergence.
+   }
+   \label{fig:simulation_iqref_tracking}
+\end{figure}
+
+
+
+
+
+
+\section{Conclusion} \label{sec:conclusion}
+
+\afterReviewChangedBox{We successfully developed and implemented a novel safety filter approach that, to our knowledge, is the first of its kind to leave the existing legacy controller subject to input constraints unaffected.
+This innovation could lead to greater acceptance of safety filters in industrial environments and real-world scenarios, advancing our understanding of their implementation across a broader range of applications. 
+Our next step is to integrate this safety filter with our industrial partners for the control of an advanced converter topology.}
+
+
+
+
+
+\section{Appendix}
+
+\subsection{Proof of \cref{thm:finite_time_convergence}} \label{sec:proof_finite_time_convergence}
+
+Because the safe set $\mathcal X_s$ is compact and forward invariant, and the closed-loop dynamical system $\dot x = f(x) + G(x) u_s(x)$ is Lipschitz-continuous, there exists a unique trajectory $x(t)$ for all $x(0) \in \mathcal X_s$ and $t > 0$.
+The CLF condition in \cref{eq:clf_condition} with $u := u_s(x)$ can be written without dissipation rate as $\forall x \in \partial X_n$:
+\begin{align} \label{eq:clf_condition_no_diss_rate}
+   \nabla V(x)^T \left ( f(x) + G(x) u_s(x) \right ) \leq 0.
+\end{align}
+Using the tangent cone $T_{\mathcal X_n}(x) = \{ z \mid \nabla V(x)^T z \leq 0 \}$, the condition \cref{eq:clf_condition_no_diss_rate} can be formulated as $\forall x \in \partial X_n$:
+\begin{align*}
+   f(x) + G(x) u_s(x) \in \mathcal T_{\mathcal X_n}(x).
+\end{align*}
+Hence, according to \cite[Nagumo's Theorem 4.7]{Blanchini:99}, $\mathcal X_n$ is forward invariant.
+This proves that for all $x(0) \in \mathcal X_n$, we can choose $T=0$.
+lt remains to show that for all other initial states, i.e., $x(0) \in \mathcal X_t$, there exists $T \geq 0$ such that $x(T) \in \mathcal X_n$, or equivalently $V \left ( x(T) \right ) \leq 0$.
+
+As $\mathcal X_t \subseteq \mathcal X_s$ is compact (cf. \cref{ass:compact_safe_set}) and the dissipative rate $d(x)$ defined in \cref{eq:dissipation_rate} is assumed to be strictly positive and Lipschitz-continuous on $\mathcal X_t$, the following minimum exists: $l = \underset{x \in \mathcal X_t}{\text{min}} \lambda(x) \left ( V(x) + V_0 \right ) > 0$.
+Therefore, the scalar function $V \left ( x(t) \right )$ strictly decreases over time for all $x(0) \in \mathcal X_t$ due to the CLF condition in \cref{eq:clf_condition}: $\dot V = \nabla V(x) \left (f(x) + G(x) u_s(x) \right ) \leq - l < 0$.
+As $\mathcal X_s$ is forward invariant, $V \left ( x(t) \right )$ is upper bounded by $V \left ( x(t) \right ) \leq V \left (x(0) \right ) - l t$  for all $x(0) \in \mathcal X_t$.
+Therefore, there exists some $T \leq V \left (x(0) \right ) /l$ such that $V \left (x(T) \right ) \leq 0$.
+
+
+
+\subsection{Proof of \cref{lem:sos_constraint_sufficient}}
+By dividing \cref{eq:sos_constraint_inequality_cbf,eq:sos_constraint_inequality_clf} by $s(x) > 0$, we obtain
+\begin{subequations}
+   \begin{align}
+      \begin{split} \label{eq:sos_constraint_inequality_cbf_div_by_s}
+         \nabla B_i^T \left ( f + G u_\text{sos} \right ) + \frac{\gamma_{0,i}}{s} B_i - \frac{\gamma_{1,i}^T}{s} B_{\mathcal I_t} &\leq 0
+      \end{split} \\
+      \begin{split} \label{eq:sos_constraint_inequality_clf_div_by_s}
+         \nabla V^T \left ( f + G u_\text{sos} \right ) + d + \frac{\gamma_{0,0}}{s} V - \frac{\gamma_{1,0}^T}{s} B_{\mathcal I_t} &\leq 0,
+      \end{split}
+   \end{align}
+\end{subequations}
+where $u_\text{sos}(x) = p(x)/s(x)$.
+
+From \cref{eq:sos_constraint_inequality_cbf_div_by_s}, by using the fact that $\gamma_{1,i}(x) \geq 0$, $s(x) > 0$, and $B_i(x) = 0$ and $B_{\mathcal I_t}(x) \leq 0$ on $\partial \mathcal X_s$, we infer, for each $i \in \mathcal I_t$, that for all $x \in \partial \mathcal X_s$ there exists $u := u_\text{sos}(x)$ such that $\nabla B_i^T \left ( f + G u_\text{sos} \right ) \leq 0$
+whenever $B_i(x) = 0$.
+Or, equivalently, for all $x \in \partial \mathcal X_s$ there exists $u := u_\text{sos}(x)$ such that $\nabla B_i^T \left ( f + G u \right ) \leq 0$
+for all $i \in \text{Act}(x)$, as defined in \cref{eq:cbf_condition_active_constraints}.
+This proofs the CBF condition in \cref{eq:cbf_condition} using the definition of the tangent cone under \cref{ass:regular_safe_set}.
+
+From \cref{eq:sos_constraint_inequality_clf_div_by_s}, by using the fact that $\gamma_{0,0}(x) \geq 0$, $\gamma_{1,0}(x) \geq 0$, $s(x) > 0$, and $V(x) \geq 0$ and $B_{\mathcal I_t}(x) \leq 0$ on $\mathcal X_t$, we deduce that for all $x \in \mathcal X_t$ there exists $u := u_\text{sos}(x)$ such that 
+$\nabla V^T \left ( f + G u \right ) + \lambda \bigl ( V - V_0 \bigr ) \leq 0$.
+This proofs the CLF condition \cref{eq:clf_condition}.
+
+Finally, from \cref{eq:sos_constraint_inequality_nom}, by using the fact that $V(x) = 0$ on $\partial \mathcal X_n$, we deduce that the inequality $\nabla V^T \left ( f + G u_n \right ) \leq 0$
+holds for all $x \in \partial \mathcal X_n$.
+This proofs the CBF condition in \cref{eq:forward_invariant_nominal_region}.
+
+
+
+\subsection{Proof of \cref{lem:quadratic_input_sos_constraints}}
+
+We use the definition of a quadratic module in \cref{eq:quadratic_module}, to rewrite the SOS constraint in \cref{eq:linear_input_sos_constraints} as $\forall x \in \R^n, \exists \gamma_u \in (\Sigma[x])^t$:
+\begin{align*}
+   -a_i u_\text{SOS}(x) + b_i + \frac{\gamma_u(x)^T}{s(x)} B_{\mathcal I_t}(x) \geq 0
+\end{align*}
+for $i \in \mathcal I_l$, and $u_\text{SOS}(x) = p(x) / s(x)$.
+Since the $\gamma_u(x) \geq 0$, $s(x) > 0$, and $B_{\mathcal I_t}(x) \leq 0$ on $\mathcal X_s$, we deduce, for all $i \in \mathcal I_l$, $-a_i u_\text{SOS}(x) + b_i \geq 0$ on $\mathcal X_s$.
+This concludes the first part of the proof.
+
+By substituting the variable $v$ in \cref{eq:quadratic_input_sos_constraints} with $u - u_0$, we can reformulate the SOS constraints by using the definition of a quadratic module as $\forall x \in \R^n, \exists \gamma_{u,1} \in \Sigma[x, u], \gamma_{u,2} \in (\Sigma[x, u])^t$:
+\begin{align} \label{_eq:quadratic_input_sos_constraints_div_by_s}
+   \begin{split}
+      &- \left ( (u - u_0)^T Q_u \left ( u_\text{SOS}(x) - u_0 \right ) - u_\text{max}^2 \right ) \\
+      &\quad + \frac{\gamma_{u,1}(x,u)}{s(x)} f_u(x, u - u_0) + \frac{\gamma_{u,2}(x,u)^T}{s(x)} B_{\mathcal I_t} \geq 0,
+   \end{split}
+\end{align}
+where $x \in \R^n$ and $u \in \R^m$ are the variables of the polynomial expressions.
+Because of its positive semidefiniteness, $Q_u$ can be decomposed into $Q_u = B_u^T B_u$.
+Furthermore, since $\gamma_{u,1}(x,u) \geq 0$, $\gamma_{u,2}(x,u) \geq 0$, $s(x) > 0$, $B_{\mathcal I_t}(x) \leq 0$ on $\mathcal X_s$, and $f_u(x, u - u_0) \leq 0$ on $\mathcal U$, condition \cref{_eq:quadratic_input_sos_constraints_div_by_s} can be reformulated as $\forall x \in \mathcal X_s, \forall u \in \mathcal U$:
+\begin{align} \label{eq:quadratic_input_sos_constraints_local_on_xs}
+   (u - u_0)^T B_u^T B_u (u_\text{SOS}(x) - u_0) \leq u_\text{max}^2.
+\end{align}
+
+For any $x \in \{ x \in \mathcal X_s \mid B_u (u_\text{SOS}(x) - u_0) = 0 \}$, we have $(u_\text{SOS}(x) - u_0)^T B_u^T B_u (u_\text{SOS}(x) - u_0) = 0 \leq u_\text{max}^2$.
+Hence, 
+$u_\text{SOS}(x) \in \mathcal U$.
+
+For any other safe state, that is $x \in \{ x \in \mathcal X_s \mid B_u (u_\text{SOS}(x) - u_0) \neq 0 \}$, there exists a unique $\lambda > 0$ such that 
+\begin{align} \label{eq:input_constr_lambda_condition}
+   \begin{split}
+      \left (B_u \lambda (u_\text{SOS}(x) - u_0) \right )^T \left (B_u \lambda (u_\text{SOS}(x) - u_0) \right ) &= u_\text{max}^2.
+   \end{split}
+\end{align}
+Additionally, substituting $u$ by $\lambda (u_\text{SOS}(x) - u_0) + u_0$ in condition \cref{eq:quadratic_input_sos_constraints_local_on_xs} yields the condition that $\forall x \in \mathcal X_s$:
+\begin{align} \label{eq:input_constr_lambda_condition_2}
+   \lambda (B_u (u_\text{SOS}(x) - u_0))^T (B_u (u_\text{SOS}(x) - u_0)) \leq u_\text{max}^2.
+\end{align}
+By comparing \cref{eq:input_constr_lambda_condition,eq:input_constr_lambda_condition_2}, we conclude that $\lambda$ must be greater than $1$.
+As a consequence, $(B_u (u_\text{SOS}(x) - u_0))^T (B_u (u_\text{SOS}(x) - u_0)) \leq u_\text{max}^2$ holds for all $x \in \mathcal X_s$.
+This concludes that $u_\text{SOS}(x) \in \mathcal U$ for all $x \in \mathcal X_s$.
+
+
+
+\subsection{Proof of \cref{thm:lipschitz_continuity}} \label{sec:proof_lipschitz}
+
+Consider the optimization problem
+\begin{align} \label{eq:abstract_optimization_problem}
+   \begin{array}{ll}
+      \mbox{min}_u & f(u, x) \\
+      \mbox{s.t.} & g(u, x) \leq 0,
+   \end{array}
+\end{align}
+and a point $x^* \in \R^n$.
+We say $(u_s(x^*), \lambda(x^*))$ is a \emph{regular minimizer} if the LICQ is satisfied at $u_s(x^*)$, and $(u_s(x^*), \lambda(x^*))$ satisfies the KKT condition and the strong second order sufficient condition (SSOSC).
+The point $(u, \lambda)$ satisfies the SSOSC if Hessian matrix of the Lagrangian of \cref{eq:abstract_optimization_problem} is positive definite at this point.
+According to \cite[Theorem 2.3.3]{jittorntrum1978sequential}, there exists a locally Lipschitz continuous map $u_s(x)$ around a neighborhood of $x^*$ such that $u_s(x) \in \R^m$ is a minimizer for the non-linear optimization problem \cref{eq:abstract_optimization_problem}, if $f$ and $g$
+are twice continuously differentiable in $(u, x)$, and $u_s(x^*)$ is a regular minimizer with multiplier $\lambda(x^*)$.
+In what follows, we establish these conditions for the QCQP in \cref{eq:qcqp_based_controller_constraints}.
+
+LICQ property under \cref{ass:licq} asserts that for any solution of the QCQP $u_s(x^*)$, there exists a unique $\lambda^*$ that satisfies the KKT condition at $(u_s(x^*), \lambda^*)$.
+Next, we show that the SSOSC holds for any choice of $\lambda^*$, specifically $\lambda^*$ that satisfies the KKT condition.
+Consider the Lagrangian of the QCQP for either linear or quadratic input constraints:
+\begin{align*}
+   \begin{split}
+      L(u, \lambda) =& u^T u + 2 u_n(x) u + u_n(x)^T u_n(x)  \\
+      & + \lambda_1^T ( C(x) u + b(x) ) \\
+      & + \lambda_2^T ( u^T Q_u u - u_{max}^2 ) + \lambda_3^T (A u - b)
+   \end{split}
+\end{align*}
+Then the inequality $ v^T \nabla_{uu}^2 L(u, \lambda) v = v^T v + \lambda_2 v^T Q_u v > 0$ for all $v \in \R^m$.
+This proves that any solution of the QCQP $u_s(x^*)$ satisfies the SSOSC with the corresponding $\lambda^*$.
+Furthermore, a solution of the QCQP $u_s(x)$ exists for all $x$ due to the lower bound on $r(x)$ in \cref{eq:r_lower_bound_feasibility}, consequently establishing the local Lipschitz continuity of $u_s(x)$.
+
+
+\bibliographystyle{unsrt}
+\bibliography{main}
+
+\vskip -2\baselineskip plus -1fil
+
+% supplementary material
+\input{supplementarymaterial}
+
+\end{document}
