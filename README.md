@@ -1,9 +1,13 @@
 # Advanced Safety Filter
 
-The project includes Jupyter notebooks templates that model and simulate the concept of an advanced safety filter.
+A safety filter is a technique from *control theory* to render an well-established controller safe within the limits of a dynamical system.
+The advanced safety filter additionally guarantees non-inference during nominal operation, thereby preserving the original behavior of the controller during nominal conditions.
+This toolbox computes *Control Barrier and Lyapunov Functions* based on *Sum-of-Squares* Optimization, which can then be integrated into the traditional safety filter through a *Quadratic Program* formulation.
+The projects is structured as follows:
 
-* [Advanced Safety Filter Template](https://github.com/MichaelSchneeberger/advanced-safety-filter/blob/main/jupyter/advanced_safety_filter_template.ipynb)
-
+ - jupyter - A [*Jupyter* notebook template](https://github.com/MichaelSchneeberger/advanced-safety-filter/blob/main/jupyter/advanced_safety_filter_template.ipynb) for computing the optimized parameters of an advanced safety filter.
+ - jupyter/power_converter_case_study - *Jupyter* notebooks demonstrating the application of the template in a power converter case study.
+ - tex - *LaTeX* files of the corresponding research paper.
 
 
 ## How to run Jupyter Notebooks
@@ -16,7 +20,7 @@ Then, clone this project to your local machine and install the requirements usin
 pip install -r requirements.txt
 ```
 
-Next, open the Jupyter notebooks using Jupyterlab.
+Next, open the Jupyter notebook template using Jupyterlab.
 
 
 ## Citing
